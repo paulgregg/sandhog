@@ -20,13 +20,13 @@ def lineRewrite(inString):
 
 #Stolen from stackoverflow and then tweaked
 def hashfile(filepath): #This generates a hash based on file content only, but that's what we want anyway
-    sha1 = hashlib.sha1()
+    fileHash = hashlib.sha1()
     f = open(filepath, 'rb')
     try:
-        sha1.update(f.read() + str(os.path.getsize(filepath))) #update sha1 hash source based on file data content and file size
+        fileHash.update(f.read() + str(os.path.getsize(filepath))) #update sha1 hash source based on file data content and file size
     finally:
         f.close()
-    return sha1.hexdigest() #generate the sha1 has based on the source info
+    return fileHash.hexdigest() #generate the sha1 has based on the source info
 
 def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder for dupes, really just hashes every readable file and puts in the DB
 		startTime = time.time()
