@@ -14,6 +14,10 @@ fileHashes = 'file_hashes'
 reportFile = 'dupe_report.csv'
 errorLog = 'error.log'
 
+def lineRewrite(inString):
+    sys.stdout.write("\r"+str(inString))
+    sys.stdout.flush()
+
 #Stolen from stackoverflow and then tweaked
 def hashfile(filepath): #This generates a hash based on file content only, but that's what we want anyway
     sha1 = hashlib.sha1()
@@ -26,6 +30,9 @@ def hashfile(filepath): #This generates a hash based on file content only, but t
 
 def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder for dupes, really just hashes every readable file and puts in the DB
 		startTime = time.time()
+		fileNumber = 0
+		errNumber = 0
+		totalFiles = sum([len(files) for r, d, files in os.walk(targetFolder)])
 		conn = sqlite3.connect(dbName) #open or create our database to store all this stuff
 		c = conn.cursor() #initialize our cursor to manipulate the DB
 		# Create the  file hashes table if there isn't one already
@@ -33,19 +40,22 @@ def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder 
 		errlog = open(errorLog, 'w') #open the error log file for writing
 		for folder, dirs, files in os.walk(targetFolder):
 			for filename in files:
+				fileNumber += 1
 				try:
 					targetFile = os.path.join(folder,filename)
-					# print "Processing: " + targetFile +"\r"
 					targetSize = os.path.getsize(targetFile) #returns size in bytes
 					targetHash = hashfile(targetFile)
 					c.execute("INSERT OR IGNORE INTO file_hashes(filename,size,hash) VALUES (?,?,?)", (targetFile,targetSize,targetHash)) #write an entry to the file_hashes table for each file with its hash
 				except:
 					errlog.write( "Error processing: " + filename )
+					errNumber += 1
+				percentComplete = 100 * float(fileNumber) / float(totalFiles)
+				lineRewrite( "Processing.  Completed %i of %i files with %i errors. (%f%% complete)" % (fileNumber, totalFiles, errNumber, percentComplete) ) #update status on stdout
 		conn.commit() #commit the changes to the DB
 		conn.close()
 		errlog.close()
 		totalTime = time.time() - startTime
-		print "Task complete in %s seconds" % str(datetime.timedelta(seconds=totalTime))
+		print "\nTask complete in %s seconds" % str(datetime.timedelta(seconds=totalTime))
 
 def runReport(dbName, table, outFile): #Generate a CSV report based on the table in the DB for items with matching hashes only NEEDS TO CHECK FOR EXISTENCE OF DB AND TABLE AND RETURN ERROR!
 	if os.path.isfile(dbName):
