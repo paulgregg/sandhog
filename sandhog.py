@@ -45,7 +45,7 @@ def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder 
 					targetFile = os.path.join(folder,filename)
 					targetSize = os.path.getsize(targetFile) #returns size in bytes
 					targetHash = hashfile(targetFile)
-					c.execute("INSERT OR IGNORE INTO file_hashes(filename,size,hash) VALUES (?,?,?)", (targetFile,targetSize,targetHash)) #write an entry to the file_hashes table for each file with its hash
+					c.execute("INSERT OR UPDATE INTO file_hashes(filename,size,hash) VALUES (?,?,?)", (targetFile,targetSize,targetHash)) #write an entry to the file_hashes table for each file with its hash
 				except:
 					errlog.write( "Error processing: " + filename )
 					errNumber += 1
