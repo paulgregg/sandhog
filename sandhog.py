@@ -45,9 +45,9 @@ def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder 
 					targetFile = os.path.join(folder,filename)
 					targetSize = os.path.getsize(targetFile) #returns size in bytes
 					targetHash = hashfile(targetFile)
-					c.execute("INSERT OR UPDATE INTO file_hashes(filename,size,hash) VALUES (?,?,?)", (targetFile,targetSize,targetHash)) #write an entry to the file_hashes table for each file with its hash
-				except:
-					errlog.write( "Error processing: " + filename )
+					c.execute("INSERT OR REPLACE INTO file_hashes(filename,size,hash) VALUES (?,?,?)", (targetFile,targetSize,targetHash)) #write an entry to the file_hashes table for each file with its hash
+				except IOError as e:
+					errlog.write( "Error processing: " + filename + ", " + e.strerror)
 					errNumber += 1
 				percentComplete = 100 * float(fileNumber) / float(totalFiles)
 				lineRewrite( "Processing.  Completed %i of %i files with %i errors. (%f%% complete)" % (fileNumber, totalFiles, errNumber, percentComplete) ) #update status on stdout
