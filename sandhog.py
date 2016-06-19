@@ -99,7 +99,8 @@ def runReport(dbName, table, outFile): #Generate a CSV report based on the table
         c = conn.cursor() #initialize our cursor to manipulate the DB
         r = open(outFile, 'w') #open the file to write the report to
         r.write( "File Path,Size,Hash\n" )
-        for row in c.execute('SELECT * FROM file_hashes WHERE hash IN (SELECT hash FROM file_hashes GROUP BY hash HAVING COUNT(*) > 1) ORDER BY size DESC'): #anything with a hash matching another item in the table
+        #anything with a hash matching another item in the table
+        for row in c.execute('SELECT * FROM file_hashes WHERE hash IN (SELECT hash FROM file_hashes GROUP BY hash HAVING COUNT(*) > 1) ORDER BY size DESC, hash'):
             #r.write( row[0] + "," + str(row[1]) + "," + row[2] + "\n" )
             r.write( "%10d %s %s\n"%(row[1], row[2], row[0]) )
             if lastHash != row[2]:
