@@ -20,10 +20,12 @@ errorLog = 'error.log'
 clearRight = "\033[K"
 moveUp = "\033[1A"
 
-def lineRewrite(inString, filePath):
+def lineRewrite(inString, filePath, fileSize):
     sys.stdout.write("\r" + clearRight);
     sys.stdout.write(moveUp)
     sys.stdout.write("\r" + clearRight);
+    if int(fileSize) > -1:
+        sys.stdout.write(" [ %12d ]" % fileSize)
     sys.stdout.write(str(filePath))
     sys.stdout.write("\n")
     sys.stdout.write(str(inString))
@@ -62,12 +64,15 @@ def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder 
             fileNumber += 1
             try:
                 targetFile = os.path.join(folder,filename)
-                targetSize = os.path.getsize(targetFile) #returns size in bytes
-                #targetHash = hashfile(targetFile)
-                targetHash = md5sum(targetFile)
-                #write an entry to the file_hashes table for each file with its hash
-                c.execute("INSERT OR REPLACE INTO file_hashes(filename,size,hash) VALUES (?,?,?)",
-                          (sqlite3.Binary(targetFile),targetSize,targetHash))
+                if os.path.isfile(targetFile):
+                    targetSize = os.path.getsize(targetFile) #returns size in bytes
+                    lineRewrite( "Processing %i of %i files with %i errors. (%.2f%% complete)" %
+                        (fileNumber, totalFiles, errNumber, percentComplete), targetFile, targetSize ) #update status on stdout
+                    #targetHash = hashfile(targetFile)
+                    targetHash = md5sum(targetFile)
+                    #write an entry to the file_hashes table for each file with its hash
+                    c.execute("INSERT OR REPLACE INTO file_hashes(filename,size,hash) VALUES (?,?,?)",
+                        (sqlite3.Binary(targetFile),targetSize,targetHash))
             except IOError as e:
                 errlog.write( "Error processing: " + filename + ", " + e.strerror)
                 errNumber += 1
@@ -75,11 +80,11 @@ def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder 
                 errlog.write( "Error processing: " + filename + ", " + e.strerror)
                 errNumber += 1
             except Exception as e:
-                errlog.write( "Error processing: " + filename + ", " + e.strerror)
+                errlog.write( "Error processing: " + filename + ", " + str(e))
                 errNumber += 1
             percentComplete = 100 * float(fileNumber) / float(totalFiles)
-            lineRewrite( "Completed %i of %i files with %i errors. (%.2f%% complete)" %
-                        (fileNumber, totalFiles, errNumber, percentComplete), targetFile ) #update status on stdout
+    lineRewrite( "Completed %i of %i files with %i errors. (%.2f%% complete)" %
+        (fileNumber, totalFiles, errNumber, percentComplete), "", -1 ) #update status on stdout
     conn.commit() #commit the changes to the DB
     conn.close()
     errlog.close()
