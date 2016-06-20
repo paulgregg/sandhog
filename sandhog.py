@@ -57,30 +57,36 @@ def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder 
     conn = sqlite3.connect(dbName) #open or create our database to store all this stuff
     c = conn.cursor() #initialize our cursor to manipulate the DB
     # Create the  file hashes table if there isn't one already
-    c.execute("CREATE TABLE IF NOT EXISTS %s (filename TEXT PRIMARY KEY, size INTEGER, hash TEXT)" % (fileHashes)) #Note that the filename is the full path and is a unique primary key
+    c.execute("CREATE TABLE IF NOT EXISTS %s (filename TEXT PRIMARY KEY, size INTEGER, device INTEGER, inode INTEGER, hash TEXT, updated TIMESTAMP)" % (fileHashes)) #Note that the filename is the full path and is a unique primary key
+
     errlog = open(errorLog, 'w') #open the error log file for writing
+    percentComplete = 0
     for folder, dirs, files in os.walk(str(targetFolder)):
         for filename in files:
             fileNumber += 1
             try:
                 targetFile = os.path.join(folder,filename)
                 if os.path.isfile(targetFile):
-                    targetSize = os.path.getsize(targetFile) #returns size in bytes
+                    fstat = os.stat(targetFile)
+                    targetSize = fstat.st_size
+                    targetDevice = fstat.st_dev
+                    targetInode = fstat.st_ino
+
                     lineRewrite( "Processing %i of %i files with %i errors. (%.2f%% complete)" %
                         (fileNumber, totalFiles, errNumber, percentComplete), targetFile, targetSize ) #update status on stdout
                     #targetHash = hashfile(targetFile)
                     targetHash = md5sum(targetFile)
                     #write an entry to the file_hashes table for each file with its hash
-                    c.execute("INSERT OR REPLACE INTO file_hashes(filename,size,hash) VALUES (?,?,?)",
-                        (sqlite3.Binary(targetFile),targetSize,targetHash))
+                    c.execute("INSERT OR REPLACE INTO file_hashes(filename,size,device,inode,hash,updated) VALUES (?,?,?,?,?,?)",
+                        (sqlite3.Binary(targetFile),targetSize,targetDevice,targetInode,targetHash,datetime.datetime.now()))
             except IOError as e:
-                errlog.write( "Error processing: " + filename + ", " + e.strerror)
+                errlog.write( "Error processing: " + filename + ", " + e.strerror + "\n")
                 errNumber += 1
             except OSError as e:
-                errlog.write( "Error processing: " + filename + ", " + e.strerror)
+                errlog.write( "Error processing: " + filename + ", " + e.strerror + "\n")
                 errNumber += 1
             except Exception as e:
-                errlog.write( "Error processing: " + filename + ", " + str(e))
+                errlog.write( "Error processing: " + filename + ", " + str(e) + "\n")
                 errNumber += 1
             percentComplete = 100 * float(fileNumber) / float(totalFiles)
     lineRewrite( "Completed %i of %i files with %i errors. (%.2f%% complete)" %
@@ -93,20 +99,36 @@ def scanFolder(dbName, table, targetFolder, errorLog): #scans the target folder 
 
 def runReport(dbName, table, outFile): #Generate a CSV report based on the table in the DB for items with matching hashes only NEEDS TO CHECK FOR EXISTENCE OF DB AND TABLE AND RETURN ERROR!
     dupeDiskSpace = 0
+    hash2devinodes = {}
     if os.path.isfile(dbName):
         lastHash = ''
+        lastInode = 0
+        lastDevice = 0
         conn = sqlite3.connect(dbName) #open or create our database to store all this stuff
-        c = conn.cursor() #initialize our cursor to manipulate the DB
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor() #initialize our cursor to manipulate the DB
         r = open(outFile, 'w') #open the file to write the report to
-        r.write( "File Path,Size,Hash\n" )
         #anything with a hash matching another item in the table
-        for row in c.execute('SELECT * FROM file_hashes WHERE hash IN (SELECT hash FROM file_hashes GROUP BY hash HAVING COUNT(*) > 1) ORDER BY size DESC, hash'):
-            #r.write( row[0] + "," + str(row[1]) + "," + row[2] + "\n" )
-            r.write( "%10d %s %s\n"%(row[1], row[2], row[0]) )
-            if lastHash != row[2]:
-                lastHash = row[2]
+        cur.execute('SELECT * FROM file_hashes WHERE hash IN (SELECT hash FROM file_hashes GROUP BY hash HAVING COUNT(*) > 1) ORDER BY size DESC, inode, hash')
+        names = list(map(lambda x: x[0], cur.description))
+        r.write("%s\t%s\t%s\t%s\t%s\n" % ("Size", "Hash", "Device", "Inode", "File Path")) # field names / csv header
+        for row in cur:
+            isHardlinked = False
+            if row["hash"] not in hash2devinodes:
+                hash2devinodes[row["hash"]] = []
+                hash2devinodes[row["hash"]].append(dict(row))
+            if lastHash != row["hash"]:
+                lastHash = row["hash"]
+                lastDevice = row["device"]
+                lastInode = row["inode"]
             else:
-                dupeDiskSpace += row[1]
+                if lastInode == row["inode"] and lastDevice == row["device"]: # hardlinked
+                    isHardlinked = True
+                else:
+                    dupeDiskSpace += row["size"]
+            r.write("%10d\t%s\t%3d\t%6d\t%s%s\n"%(row["size"],
+                    row["hash"], row["device"], row["inode"],
+                    "\\ " if isHardlinked else "", row["filename"]) )
         r.close()
         conn.close()
     else:
